@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   CreditCard,
   FileText,
+  FlaskConical,
   Loader2,
   Smartphone,
   XCircle,
@@ -50,6 +51,14 @@ export function PaymentForm() {
   const initiatePayment = useInitiatePayment();
 
   const isConfigured = merchantConfig?.isConfigured ?? false;
+  const isSandbox = merchantConfig?.isSandbox ?? true;
+
+  function fillTestData() {
+    setMobileNumber("03123456789");
+    setCnic("345678");
+    setAmount("100");
+    setDescription("Sandbox test payment");
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -145,6 +154,39 @@ export function PaymentForm() {
         </motion.div>
       )}
 
+      {/* Sandbox test data helper */}
+      {isSandbox && isConfigured && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-5 p-3 rounded-lg bg-blue-50 border border-blue-200 flex items-center justify-between gap-3"
+        >
+          <div className="flex items-start gap-2">
+            <FlaskConical className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-xs font-semibold text-blue-700">
+                Sandbox Mode
+              </p>
+              <p className="text-xs text-blue-600 mt-0.5">
+                Mobile: <span className="font-mono font-bold">03123456789</span>{" "}
+                &nbsp;|&nbsp; CNIC:{" "}
+                <span className="font-mono font-bold">345678</span>
+              </p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            data-ocid="payment.fill_test.button"
+            onClick={fillTestData}
+            className="shrink-0 h-8 text-xs border-blue-300 text-blue-700 hover:bg-blue-100"
+          >
+            Fill Test Data
+          </Button>
+        </motion.div>
+      )}
+
       <motion.form
         onSubmit={handleSubmit}
         initial={{ opacity: 0, y: 12 }}
@@ -167,7 +209,6 @@ export function PaymentForm() {
             placeholder="03xxxxxxxxx"
             value={mobileNumber}
             onChange={(e) => setMobileNumber(e.target.value)}
-            pattern="03[0-9]{9}"
             maxLength={11}
             required
             className="h-12 text-base font-mono tracking-wider"
@@ -189,18 +230,21 @@ export function PaymentForm() {
             id="cnic"
             data-ocid="payment.cnic.input"
             type="text"
+            inputMode="numeric"
             placeholder="345678"
             value={cnic}
             onChange={(e) =>
               setCnic(e.target.value.replace(/\D/g, "").slice(0, 6))
             }
-            pattern="[0-9]{6}"
             maxLength={6}
+            minLength={6}
             required
             className="h-12 text-base font-mono tracking-widest"
           />
           <p className="text-xs text-muted-foreground">
-            Enter the last 6 digits of the account holder's CNIC
+            {isSandbox
+              ? "For sandbox testing, enter: 345678"
+              : "Enter the last 6 digits of the account holder's CNIC"}
           </p>
         </div>
 
