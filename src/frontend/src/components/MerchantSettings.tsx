@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { createActorWithConfig } from "@/config";
 import { useMerchantConfig, useUpdateMerchantConfig } from "@/hooks/useQueries";
 import {
   AlertTriangle,
@@ -14,7 +13,6 @@ import {
   ExternalLink,
   Key,
   Link,
-  Loader2,
   Lock,
   Shield,
 } from "lucide-react";
@@ -33,7 +31,7 @@ export function MerchantSettings() {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (config) {
+    if (config?.isConfigured) {
       setMerchantId(config.merchantId || "MC656746");
       setIsSandbox(config.isSandbox);
     }
@@ -54,39 +52,10 @@ export function MerchantSettings() {
     e.preventDefault();
     setIsSaving(true);
     try {
-      const savePromise = updateConfig.mutateAsync({
-        merchantId,
-        password,
-        salt,
-        isSandbox,
-      });
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("timeout")), 8000),
-      );
-      await Promise.race([savePromise, timeoutPromise]);
-      toast.success("Merchant credentials saved successfully!");
-      setPassword("");
-      setSalt("");
+      await updateConfig.mutateAsync({ merchantId, password, salt, isSandbox });
+      toast.success("Credentials saved!");
     } catch (err: any) {
-      if (err?.message === "timeout") {
-        // Fallback: try creating actor directly
-        try {
-          await createActorWithConfig();
-          await updateConfig.mutateAsync({
-            merchantId,
-            password,
-            salt,
-            isSandbox,
-          });
-          toast.success("Merchant credentials saved successfully!");
-          setPassword("");
-          setSalt("");
-        } catch (fallbackErr: any) {
-          toast.error(fallbackErr?.message || "Failed to save credentials.");
-        }
-      } else {
-        toast.error(err?.message || "Failed to save credentials.");
-      }
+      toast.error(err?.message || "Failed to save credentials.");
     } finally {
       setIsSaving(false);
     }
@@ -257,14 +226,7 @@ export function MerchantSettings() {
           className="w-full h-12 font-semibold bg-primary text-primary-foreground hover:bg-primary/90"
           disabled={isSaving}
         >
-          {isSaving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            "Save Credentials"
-          )}
+          {isSaving ? "Saving..." : "Save Credentials"}
         </Button>
       </motion.form>
 
