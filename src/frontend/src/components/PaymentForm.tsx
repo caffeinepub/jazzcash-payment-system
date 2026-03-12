@@ -8,7 +8,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { useActor } from "@/hooks/useActor";
 import {
   getIntegritySalt,
   useInitiatePayment,
@@ -46,7 +45,6 @@ export function PaymentForm() {
   const [description, setDescription] = useState("");
   const [dialogState, setDialogState] = useState<DialogState>({ type: "idle" });
 
-  const { actor } = useActor();
   const { data: merchantConfig } = useMerchantConfig();
   const initiatePayment = useInitiatePayment();
 
@@ -62,12 +60,11 @@ export function PaymentForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!actor) return;
 
     setDialogState({ type: "waiting" });
 
     try {
-      const salt = await getIntegritySalt(actor);
+      const salt = await getIntegritySalt(null);
       const txnRef = generateTxnRef();
       const now = new Date();
       const expiry = new Date(now.getTime() + 30 * 60 * 1000);
