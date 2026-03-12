@@ -21,6 +21,7 @@ export interface MerchantConfig {
 
 export interface PaymentRequest {
   mobileNumber: string;
+  cnic: string;
   amount: bigint;
   description: string;
   txnRef: string;

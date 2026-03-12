@@ -31,6 +31,7 @@ actor {
 
   public type PaymentRequest = {
     mobileNumber : Text;
+    cnic : Text;
     amount : Nat;
     description : Text;
     txnRef : Text;
@@ -77,8 +78,7 @@ actor {
       "https://payments.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction"
     };
 
-    let amountPaisa = req.amount * 100;
-    let amountStr = amountPaisa.toText();
+    let amountStr = req.amount.toText();
     let billRef = "BILL" # req.txnRef;
 
     let q = "\"";
@@ -99,6 +99,7 @@ actor {
       q # "pp_Description" # q # ":" # q # req.description # q # "," #
       q # "pp_TxnExpiryDateTime" # q # ":" # q # req.txnExpiryDateTime # q # "," #
       q # "pp_MobileNumber" # q # ":" # q # req.mobileNumber # q # "," #
+      q # "pp_CNIC" # q # ":" # q # req.cnic # q # "," #
       q # "pp_SecureHash" # q # ":" # q # req.secureHash # q #
       "}";
 

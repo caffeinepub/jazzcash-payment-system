@@ -40,6 +40,7 @@ type DialogState =
 
 export function PaymentForm() {
   const [mobileNumber, setMobileNumber] = useState("");
+  const [cnic, setCnic] = useState("");
   const [amount, setAmount] = useState("");
   const [description, setDescription] = useState("");
   const [dialogState, setDialogState] = useState<DialogState>({ type: "idle" });
@@ -67,7 +68,8 @@ export function PaymentForm() {
 
       const params: Record<string, string> = {
         pp_Amount: amountFormatted,
-        pp_BillReference: txnRef,
+        pp_BillReference: `BILL${txnRef}`,
+        pp_CNIC: cnic,
         pp_Description: description || "Payment",
         pp_Language: "EN",
         pp_MerchantID: merchantConfig?.merchantId ?? "",
@@ -90,7 +92,8 @@ export function PaymentForm() {
 
       const result = await initiatePayment.mutateAsync({
         mobileNumber,
-        amount: BigInt(Math.round(Number(amount) * 100)),
+        cnic,
+        amount: BigInt(amountFormatted),
         description: description || "Payment",
         txnRef,
         txnDateTime,
@@ -101,6 +104,7 @@ export function PaymentForm() {
       if (result.responseCode === "000") {
         setDialogState({ type: "success", data: result });
         setMobileNumber("");
+        setCnic("");
         setAmount("");
         setDescription("");
       } else {
@@ -110,10 +114,12 @@ export function PaymentForm() {
             result.responseMessage || "Payment failed. Please try again.",
         });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMessage =
+        err instanceof Error ? err.message : "An unexpected error occurred.";
       setDialogState({
         type: "error",
-        message: err?.message || "An unexpected error occurred.",
+        message: errorMessage,
       });
     }
   }
@@ -168,6 +174,33 @@ export function PaymentForm() {
           />
           <p className="text-xs text-muted-foreground">
             Enter 11-digit number starting with 03
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label
+            htmlFor="cnic"
+            className="text-sm font-semibold text-foreground"
+          >
+            <CreditCard className="inline h-4 w-4 mr-1.5 text-primary" />
+            Last 6 Digits of CNIC
+          </Label>
+          <Input
+            id="cnic"
+            data-ocid="payment.cnic.input"
+            type="text"
+            placeholder="345678"
+            value={cnic}
+            onChange={(e) =>
+              setCnic(e.target.value.replace(/\D/g, "").slice(0, 6))
+            }
+            pattern="[0-9]{6}"
+            maxLength={6}
+            required
+            className="h-12 text-base font-mono tracking-widest"
+          />
+          <p className="text-xs text-muted-foreground">
+            Enter the last 6 digits of the account holder's CNIC
           </p>
         </div>
 
