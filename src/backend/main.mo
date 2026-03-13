@@ -5,10 +5,13 @@ import Outcall "./http-outcalls/outcall";
 
 actor {
 
+  // Keep old stable vars for upgrade compatibility
   stable var merchantId : Text = "";
   stable var merchantPassword : Text = "";
   stable var integritySalt : Text = "";
   stable var isSandbox : Bool = true;
+
+  stable var transactions : [TransactionRecord] = [];
 
   public type TransactionRecord = {
     txnRef : Text;
@@ -21,14 +24,6 @@ actor {
     timestamp : Int;
   };
 
-  stable var transactions : [TransactionRecord] = [];
-
-  public type MerchantConfig = {
-    merchantId : Text;
-    isSandbox : Bool;
-    isConfigured : Bool;
-  };
-
   public type PaymentRequest = {
     mobileNumber : Text;
     cnic : Text;
@@ -38,6 +33,9 @@ actor {
     txnDateTime : Text;
     txnExpiryDateTime : Text;
     secureHash : Text;
+    merchantId : Text;
+    merchantPassword : Text;
+    isSandbox : Bool;
   };
 
   public type PaymentResult = {
@@ -47,32 +45,8 @@ actor {
     status : Text;
   };
 
-  public func updateMerchantConfig(
-    newMerchantId : Text,
-    newPassword : Text,
-    newSalt : Text,
-    sandbox : Bool
-  ) : async () {
-    merchantId := newMerchantId;
-    merchantPassword := newPassword;
-    integritySalt := newSalt;
-    isSandbox := sandbox;
-  };
-
-  public query func getMerchantConfig() : async MerchantConfig {
-    {
-      merchantId = merchantId;
-      isSandbox = isSandbox;
-      isConfigured = merchantId != "" and merchantPassword != "" and integritySalt != "";
-    };
-  };
-
-  public query func getIntegritySalt() : async Text {
-    integritySalt;
-  };
-
   public func initiatePayment(req : PaymentRequest) : async PaymentResult {
-    let apiUrl = if (isSandbox) {
+    let apiUrl = if (req.isSandbox) {
       "https://sandbox.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction"
     } else {
       "https://payments.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction"
@@ -86,9 +60,9 @@ actor {
       q # "pp_Version" # q # ":" # q # "1.1" # q # "," #
       q # "pp_TxnType" # q # ":" # q # "MWALLET" # q # "," #
       q # "pp_Language" # q # ":" # q # "EN" # q # "," #
-      q # "pp_MerchantID" # q # ":" # q # merchantId # q # "," #
+      q # "pp_MerchantID" # q # ":" # q # req.merchantId # q # "," #
       q # "pp_SubMerchantID" # q # ":" # q # q # "," #
-      q # "pp_Password" # q # ":" # q # merchantPassword # q # "," #
+      q # "pp_Password" # q # ":" # q # req.merchantPassword # q # "," #
       q # "pp_BankID" # q # ":" # q # "TBANK" # q # "," #
       q # "pp_ProductID" # q # ":" # q # "RETL" # q # "," #
       q # "pp_TxnRefNo" # q # ":" # q # req.txnRef # q # "," #
@@ -116,7 +90,7 @@ actor {
       let response = await Outcall.httpPostRequest(apiUrl, headers, body, transform);
       responseCode := extractJsonValue(response, "pp_ResponseCode");
       responseMessage := extractJsonValue(response, "pp_ResponseMessage");
-      status := if (responseCode == "000") "SUCCESS" else "FAILED";
+      status := if (responseCode == "000") "SUCCESS" else if (responseCode == "157") "PENDING" else "FAILED";
     } catch (_) {
       responseCode := "ERR";
       responseMessage := "Network error: could not reach JazzCash API";

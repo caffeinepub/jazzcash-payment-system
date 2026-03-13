@@ -3,12 +3,6 @@ import { IDL } from "@dfinity/candid";
 
 // Candid IDL factory
 const idlFactory = ({ IDL: I }: { IDL: typeof IDL }) => {
-  const MerchantConfig = I.Record({
-    merchantId: I.Text,
-    isSandbox: I.Bool,
-    isConfigured: I.Bool,
-  });
-
   const TransactionRecord = I.Record({
     txnRef: I.Text,
     mobileNumber: I.Text,
@@ -22,12 +16,16 @@ const idlFactory = ({ IDL: I }: { IDL: typeof IDL }) => {
 
   const PaymentRequest = I.Record({
     mobileNumber: I.Text,
+    cnic: I.Text,
     amount: I.Nat,
     description: I.Text,
     txnRef: I.Text,
     txnDateTime: I.Text,
     txnExpiryDateTime: I.Text,
     secureHash: I.Text,
+    merchantId: I.Text,
+    merchantPassword: I.Text,
+    isSandbox: I.Bool,
   });
 
   const PaymentResult = I.Record({
@@ -38,30 +36,24 @@ const idlFactory = ({ IDL: I }: { IDL: typeof IDL }) => {
   });
 
   return I.Service({
-    updateMerchantConfig: I.Func(
-      [I.Text, I.Text, I.Text, I.Bool],
-      [],
-      [],
-    ),
-    getMerchantConfig: I.Func([], [MerchantConfig], ["query"]),
-    getIntegritySalt: I.Func([], [I.Text], ["query"]),
     initiatePayment: I.Func([PaymentRequest], [PaymentResult], []),
     getTransactions: I.Func([], [I.Vec(TransactionRecord)], ["query"]),
   });
 };
 
 export interface backendInterface {
-  getMerchantConfig(): Promise<{ merchantId: string; isSandbox: boolean; isConfigured: boolean }>;
-  getIntegritySalt(): Promise<string>;
-  updateMerchantConfig(merchantId: string, password: string, salt: string, isSandbox: boolean): Promise<void>;
   initiatePayment(req: {
     mobileNumber: string;
+    cnic: string;
     amount: bigint;
     description: string;
     txnRef: string;
     txnDateTime: string;
     txnExpiryDateTime: string;
     secureHash: string;
+    merchantId: string;
+    merchantPassword: string;
+    isSandbox: boolean;
   }): Promise<{ txnRef: string; responseCode: string; responseMessage: string; status: string }>;
   getTransactions(): Promise<Array<{
     txnRef: string;

@@ -8,17 +8,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  getIntegritySalt,
-  useInitiatePayment,
-  useMerchantConfig,
-} from "@/hooks/useQueries";
+import { useInitiatePayment, useMerchantConfig } from "@/hooks/useQueries";
 import type { PaymentResponse } from "@/hooks/useQueries";
-import {
-  computeJazzCashHash,
-  formatJazzCashDateTime,
-  generateTxnRef,
-} from "@/utils/jazzcash";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -60,51 +51,14 @@ export function PaymentForm() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-
     setDialogState({ type: "waiting" });
 
     try {
-      const salt = await getIntegritySalt(null);
-      const txnRef = generateTxnRef();
-      const now = new Date();
-      const expiry = new Date(now.getTime() + 30 * 60 * 1000);
-      const txnDateTime = formatJazzCashDateTime(now);
-      const txnExpiryDateTime = formatJazzCashDateTime(expiry);
-      const amountFormatted = (Number(amount) * 100).toFixed(0);
-
-      const params: Record<string, string> = {
-        pp_Amount: amountFormatted,
-        pp_BillReference: `BILL${txnRef}`,
-        pp_CNIC: cnic,
-        pp_Description: description || "Payment",
-        pp_Language: "EN",
-        pp_MerchantID: merchantConfig?.merchantId ?? "",
-        pp_MobileNumber: mobileNumber,
-        pp_SubMerchantID: "",
-        pp_TxnCurrency: "PKR",
-        pp_TxnDateTime: txnDateTime,
-        pp_TxnExpiryDateTime: txnExpiryDateTime,
-        pp_TxnRefNo: txnRef,
-        pp_TxnType: "MWALLET",
-        pp_Version: "1.1",
-        ppmpf_1: "",
-        ppmpf_2: "",
-        ppmpf_3: "",
-        ppmpf_4: "",
-        ppmpf_5: "",
-      };
-
-      const secureHash = await computeJazzCashHash(params, salt);
-
       const result = await initiatePayment.mutateAsync({
         mobileNumber,
         cnic,
-        amount: BigInt(amountFormatted),
+        amount: BigInt(Math.round(Number(amount) * 100)),
         description: description || "Payment",
-        txnRef,
-        txnDateTime,
-        txnExpiryDateTime,
-        secureHash,
       });
 
       if (result.responseCode === "000") {
@@ -123,10 +77,7 @@ export function PaymentForm() {
     } catch (err: unknown) {
       const errorMessage =
         err instanceof Error ? err.message : "An unexpected error occurred.";
-      setDialogState({
-        type: "error",
-        message: errorMessage,
-      });
+      setDialogState({ type: "error", message: errorMessage });
     }
   }
 
@@ -151,7 +102,6 @@ export function PaymentForm() {
         </motion.div>
       )}
 
-      {/* Sandbox test data helper */}
       {isSandbox && isConfigured && (
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -165,7 +115,7 @@ export function PaymentForm() {
                 Sandbox Mode
               </p>
               <p className="text-xs text-blue-600 mt-0.5">
-                Mobile: <span className="font-mono font-bold">03123456789</span>{" "}
+                Mobile: <span className="font-mono font-bold">03123456789</span>
                 &nbsp;|&nbsp; CNIC:{" "}
                 <span className="font-mono font-bold">345678</span>
               </p>
@@ -315,7 +265,6 @@ export function PaymentForm() {
         </Button>
       </motion.form>
 
-      {/* Waiting / Loading Dialog */}
       <Dialog open={dialogState.type === "waiting"} onOpenChange={() => {}}>
         <DialogContent
           data-ocid="payment.loading_state"
@@ -363,7 +312,6 @@ export function PaymentForm() {
         </DialogContent>
       </Dialog>
 
-      {/* Success Dialog */}
       <AnimatePresence>
         {dialogState.type === "success" && (
           <Dialog open onOpenChange={() => setDialogState({ type: "idle" })}>
@@ -414,7 +362,6 @@ export function PaymentForm() {
         )}
       </AnimatePresence>
 
-      {/* Error Dialog */}
       <AnimatePresence>
         {dialogState.type === "error" && (
           <Dialog open onOpenChange={() => setDialogState({ type: "idle" })}>

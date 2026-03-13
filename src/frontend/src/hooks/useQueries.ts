@@ -1,3 +1,8 @@
+import {
+  computeJazzCashHash,
+  formatJazzCashDateTime,
+  generateTxnRef,
+} from "@/utils/jazzcash";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const STORAGE_KEY = "jazzcash_merchant_config";
@@ -32,10 +37,10 @@ export interface PaymentRequest {
   cnic: string;
   amount: bigint;
   description: string;
-  txnRef: string;
-  txnDateTime: string;
-  txnExpiryDateTime: string;
-  secureHash: string;
+  txnRef?: string;
+  txnDateTime?: string;
+  txnExpiryDateTime?: string;
+  secureHash?: string;
 }
 
 export interface PaymentResponse {
@@ -160,70 +165,6 @@ export function useUpdateMerchantConfig() {
   return { ...mutation, isActorReady: true };
 }
 
-async function callJazzCashDirect(
-  req: PaymentRequest & {
-    merchantId: string;
-    password: string;
-    isSandbox: boolean;
-  },
-): Promise<PaymentResponse> {
-  const baseUrl = req.isSandbox
-    ? "https://sandbox.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction"
-    : "https://jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction";
-
-  const amountStr = req.amount.toString();
-
-  const body = {
-    pp_Version: "1.1",
-    pp_TxnType: "MWALLET",
-    pp_Language: "EN",
-    pp_MerchantID: req.merchantId,
-    pp_SubMerchantID: "",
-    pp_Password: req.password,
-    pp_BillReference: `BILL${req.txnRef}`,
-    pp_Amount: amountStr,
-    pp_TxnCurrency: "PKR",
-    pp_TxnDateTime: req.txnDateTime,
-    pp_TxnExpiryDateTime: req.txnExpiryDateTime,
-    pp_TxnRefNo: req.txnRef,
-    pp_MobileNumber: req.mobileNumber,
-    pp_CNIC: req.cnic,
-    pp_Description: req.description,
-    pp_SecureHash: req.secureHash,
-    ppmpf_1: "",
-    ppmpf_2: "",
-    ppmpf_3: "",
-    ppmpf_4: "",
-    ppmpf_5: "",
-  };
-
-  const response = await fetch(baseUrl, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    throw new Error(
-      `JazzCash API error: ${response.status} ${response.statusText}`,
-    );
-  }
-
-  const data = await response.json();
-  const code: string = data.pp_ResponseCode ?? data.responseCode ?? "999";
-  const message: string =
-    data.pp_ResponseMessage ?? data.responseMessage ?? "Unknown error";
-  const status =
-    code === "000" ? "SUCCESS" : code === "157" ? "PENDING" : "FAILED";
-
-  return {
-    txnRef: req.txnRef,
-    responseCode: code,
-    responseMessage: message,
-    status,
-  };
-}
-
 export function useInitiatePayment() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -235,26 +176,114 @@ export function useInitiatePayment() {
         );
       }
 
-      const result = await callJazzCashDirect({
-        ...req,
-        merchantId: stored.merchantId,
-        password: stored.password,
-        isSandbox: stored.isSandbox,
-      });
+      // Build payment parameters entirely in the browser
+      const txnRef = generateTxnRef();
+      const now = new Date();
+      const expiry = new Date(now.getTime() + 30 * 60 * 1000);
+      const txnDateTime = formatJazzCashDateTime(now);
+      const txnExpiryDateTime = formatJazzCashDateTime(expiry);
+      const amountFormatted = Number(req.amount).toFixed(0);
+      const billRef = `BILL${txnRef}`;
+
+      const params: Record<string, string> = {
+        pp_Amount: amountFormatted,
+        pp_BankID: "TBANK",
+        pp_BillReference: billRef,
+        pp_CNIC: req.cnic,
+        pp_Description: req.description || "Payment",
+        pp_Language: "EN",
+        pp_MerchantID: stored.merchantId,
+        pp_MobileNumber: req.mobileNumber,
+        pp_Password: stored.password,
+        pp_ProductID: "RETL",
+        pp_SubMerchantID: "",
+        pp_TxnCurrency: "PKR",
+        pp_TxnDateTime: txnDateTime,
+        pp_TxnExpiryDateTime: txnExpiryDateTime,
+        pp_TxnRefNo: txnRef,
+        pp_TxnType: "MWALLET",
+        pp_Version: "1.1",
+        ppmpf_1: "",
+        ppmpf_2: "",
+        ppmpf_3: "",
+        ppmpf_4: "",
+        ppmpf_5: "",
+      };
+
+      const secureHash = await computeJazzCashHash(params, stored.salt);
+
+      const endpoint = stored.isSandbox
+        ? "https://sandbox.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction"
+        : "https://payments.jazzcash.com.pk/ApplicationAPI/API/2.0/Purchase/DoMWalletTransaction";
+
+      // Use CORS proxy to avoid browser CORS restrictions
+      const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(endpoint)}`;
+
+      const body = JSON.stringify({ ...params, pp_SecureHash: secureHash });
+
+      let responseData: Record<string, string> | null = null;
+
+      try {
+        const res = await fetch(proxyUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body,
+        });
+        if (res.ok) {
+          responseData = (await res.json()) as Record<string, string>;
+        }
+      } catch {
+        // proxy failed, try direct call as fallback
+      }
+
+      if (!responseData) {
+        // Fallback: try direct call (may work on some networks)
+        try {
+          const res = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body,
+          });
+          if (res.ok) {
+            responseData = (await res.json()) as Record<string, string>;
+          }
+        } catch {
+          throw new Error(
+            "Unable to reach JazzCash. Check your internet connection and try again.",
+          );
+        }
+      }
+
+      if (!responseData) {
+        throw new Error("No response from JazzCash. Please try again.");
+      }
+
+      const respCode = responseData.pp_ResponseCode ?? "999";
+      const respMsg =
+        responseData.pp_ResponseMessage ??
+        responseData.pp_TxnMessage ??
+        "Unknown error";
+      const respTxnRef = responseData.pp_TxnRefNo ?? txnRef;
+      const status = respCode === "000" ? "SUCCESS" : "FAILED";
 
       // Save transaction to local history
       saveTransaction({
-        txnRef: result.txnRef,
+        txnRef: respTxnRef,
         mobileNumber: req.mobileNumber,
         amount: req.amount,
         description: req.description,
-        status: result.status,
-        responseCode: result.responseCode,
-        responseMessage: result.responseMessage,
+        status,
+        responseCode: respCode,
+        responseMessage: respMsg,
         timestamp: BigInt(Date.now()),
       });
 
-      return result;
+      return {
+        txnRef: respTxnRef,
+        responseCode: respCode,
+        responseMessage: respMsg,
+        status,
+      };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
